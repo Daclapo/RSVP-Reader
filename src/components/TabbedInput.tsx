@@ -2,31 +2,43 @@
 import React, { useState } from 'react';
 import { InputManagerProps } from './InputManager';
 import Tab from './Tab';
-import FileDropzone from './FileDropzone'; // Import the new FileDropzone component
+import FileDropzone from './FileDropzone';
+import { toast } from 'react-hot-toast';
 
 type InputMode = 'paste' | 'upload' | 'url';
 
 const TabbedInput = ({ text, onTextChange }: InputManagerProps) => {
   const [mode, setMode] = useState<InputMode>('paste');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleUrlFetch = async () => {
     const url = prompt('Enter the URL to fetch text from:');
-    if (url) {
-      try {
-        // A proper implementation would use a server-side proxy to avoid CORS issues.
-        const response = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
-        if (response.ok) {
-          const fetchedText = await response.text();
-          onTextChange(fetchedText);
-        } else {
-          const errorData = await response.json();
-          alert(`Failed to fetch content: ${errorData.error}`);
-        }
-      } catch (error) {
-        console.error('Error fetching from URL:', error);
-        alert('An error occurred while fetching the content.');
+    if (!url) return;
+
+    setIsLoading(true);
+    const toastId = toast.loading('Fetching content...');
+
+    try {
+      const response = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+      if (response.ok) {
+        const fetchedText = await response.text();
+        onTextChange(fetchedText);
+        toast.success('Content fetched successfully!', { id: toastId });
+      } else {
+        const errorData = await response.json();
+        toast.error(`Failed to fetch content: ${errorData.error}`, { id: toastId });
       }
+    } catch (error) {
+      console.error('Error fetching from URL:', error);
+      toast.error('An error occurred while fetching the content.', { id: toastId });
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleFileContent = (content: string) => {
+    onTextChange(content);
+    toast.success('File loaded successfully!');
   };
   
   return (
@@ -47,16 +59,17 @@ const TabbedInput = ({ text, onTextChange }: InputManagerProps) => {
       )}
 
       {mode === 'upload' && (
-        <FileDropzone onFileContent={onTextChange} />
+        <FileDropzone onFileContent={handleFileContent} />
       )}
 
       {mode === 'url' && (
         <div className="flex flex-col items-center justify-center h-40">
           <button
             onClick={handleUrlFetch}
-            className="px-6 py-3 font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
+            disabled={isLoading}
+            className="px-6 py-3 font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            Fetch from URL
+            {isLoading ? 'Fetching...' : 'Fetch from URL'}
           </button>
           <p className="text-xs text-gray-500 mt-2">
             Enter a URL to fetch the text content.

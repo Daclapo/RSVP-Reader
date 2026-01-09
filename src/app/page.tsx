@@ -5,7 +5,11 @@ import RSVPViewer from '@/components/RSVPViewer';
 import Controls from '@/components/Controls';
 import InputManager from '@/components/InputManager';
 
+
 const DEFAULT_TEXT = "This is a sample text for the RSVP formatter. You can replace this by typing your own, uploading a file, or fetching from a URL.";
+
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 
 export default function Home() {
   const [text, setText] = useState<string>(DEFAULT_TEXT);
@@ -14,41 +18,66 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentWordIndex, setCurrentWordIndex] = useState<number>(0);
 
-  // Effect to split text into words
+  // Effect to process text into words
   useEffect(() => {
-    if (text) {
-      setWords(text.trim().split(/\s+/));
-      setCurrentWordIndex(0); // Reset index when text changes
-    } else {
-      setWords([]);
-    }
+    const wordsArray = text.split(/\s+/).filter(word => word.length > 0);
+    setWords(wordsArray);
+    setCurrentWordIndex(0); // Reset index when text changes
+    setIsPlaying(false); // Stop playing when text changes
   }, [text]);
 
   // Effect for RSVP playback logic
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    console.log('Playback useEffect triggered:', { isPlaying, wpm, currentWordIndex, wordsLength: words.length });
+    let interval: NodeJS.Timeout | undefined;
 
     if (isPlaying && currentWordIndex < words.length) {
-      const intervalDuration = 60000 / wpm;
+      const PUNCTUATION_PAUSE_MULTIPLIER = 1.5;
+      const baseInterval = 60000 / wpm;
+      const currentWord = words[currentWordIndex];
+      // Check for common sentence-ending or significant punctuation marks
+      const hasPunctuation = /[.,—?!;:]/.test(currentWord);
+      
+      let intervalDuration = baseInterval;
+      if (hasPunctuation) {
+        intervalDuration *= PUNCTUATION_PAUSE_MULTIPLIER;
+      }
+      console.log(`Setting interval for word "${currentWord}" (${intervalDuration}ms)`);
       interval = setInterval(() => {
-        setCurrentWordIndex((prevIndex) => prevIndex + 1);
+        setCurrentWordIndex((prevIndex) => {
+          console.log('setCurrentWordIndex from interval:', prevIndex + 1);
+          if (prevIndex >= words.length - 1) {
+            setIsPlaying(false); // Stop when text ends
+            return prevIndex; // Don't increment past the end
+          }
+          return prevIndex + 1;
+        });
       }, intervalDuration);
-    } else if (currentWordIndex >= words.length && words.length > 0) {
-      setIsPlaying(false); // Stop when text ends
+    } else if (currentWordIndex >= words.length -1 && words.length > 0) {
+      console.log('Playback ended, setting isPlaying to false.');
+      setIsPlaying(false); // Ensure playback stops at the very end
     }
 
     return () => {
-      clearInterval(interval);
+      console.log('Cleanup: clearing interval.');
+      if (interval) clearInterval(interval);
     };
-  }, [isPlaying, wpm, currentWordIndex, words.length]);
+  }, [isPlaying, wpm, currentWordIndex, words.length]); // words.length is sufficient as dependency here, not the whole words array
   
   const handlePlayPause = () => {
+    console.log('handlePlayPause called. Current isPlaying:', isPlaying);
     if (words.length > 0) {
       // If at the end, reset before playing
       if (currentWordIndex >= words.length - 1) {
+        console.log('At end of text, resetting index to 0.');
         setCurrentWordIndex(0);
       }
-      setIsPlaying(!isPlaying);
+      setIsPlaying((prev) => {
+        console.log('setIsPlaying toggled to:', !prev);
+        return !prev;
+      });
+    } else {
+      console.log('handlePlayPause: words array is empty, doing nothing.');
     }
   };
 
@@ -61,14 +90,16 @@ export default function Home() {
     setWpm(newWpm);
   };
 
+
+
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen p-4 sm:p-8 md:p-12 lg:p-24 bg-white dark:bg-gray-900">
-      <div className="w-full max-w-2xl mx-auto">
-        <h1 className="text-4xl font-bold text-center text-gray-900 dark:text-gray-100 mb-8">
-          RSVP Formatter
-        </h1>
-        <div className="space-y-6">
-          <RSVPViewer word={words[currentWordIndex]} />
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+      <Header />
+      <main className="flex-grow flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-2xl mx-auto space-y-6">
+          <div className="w-full h-48">
+            <RSVPViewer word={words[currentWordIndex]} />
+          </div>
           <Controls
             wpm={wpm}
             isPlaying={isPlaying}
@@ -79,7 +110,8 @@ export default function Home() {
           />
           <InputManager text={text} onTextChange={setText} />
         </div>
-      </div>
-    </main>
+      </main>
+      <Footer />
+    </div>
   );
 }

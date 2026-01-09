@@ -20,24 +20,16 @@ const ORPViewer = ({ word }: ORPViewerProps) => {
   };
 
   const orpIndex = getORPIndex(word);
-  const preORP = word.slice(0, orpIndex);
+  const start = word.slice(0, orpIndex);
   const orpChar = word[orpIndex];
-  const postORP = word.slice(orpIndex + 1);
-
-  // Estimate the width of the text before the ORP
-  // This is a rough estimation and might need adjustment for different fonts
-  const preORPWidth = preORP.length * 20; // Adjust the multiplier as needed
+  const end = word.slice(orpIndex + 1);
 
   return (
-    <div className="relative flex items-center justify-center w-full h-48 bg-gray-100 dark:bg-gray-800 rounded-md overflow-hidden">
-      <p
-        key={word}
-        className="absolute text-5xl font-semibold font-mono text-gray-900 dark:text-gray-100 whitespace-nowrap"
-        style={{ transform: `translateX(-${preORPWidth}px)` }}
-      >
-        <span className="text-gray-500 dark:text-gray-400">{preORP}</span>
+    <div className="flex items-center justify-center w-full h-48 bg-gray-100 dark:bg-gray-800 rounded-md">
+      <p className="text-5xl font-semibold font-mono text-gray-900 dark:text-gray-100">
+        <span className="text-gray-500 dark:text-gray-400">{start}</span>
         <span className="text-red-500">{orpChar}</span>
-        <span className="text-gray-500 dark:text-gray-400">{postORP}</span>
+        <span className="text-gray-500 dark:text-gray-400">{end}</span>
       </p>
     </div>
   );
