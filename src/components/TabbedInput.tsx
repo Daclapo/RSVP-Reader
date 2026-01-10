@@ -3,9 +3,10 @@ import React, { useState } from 'react';
 import { InputManagerProps } from './InputManager';
 import Tab from './Tab';
 import FileDropzone from './FileDropzone';
+import BookLibrary from './BookLibrary';
 import { toast } from 'react-hot-toast';
 
-type InputMode = 'paste' | 'upload' | 'url';
+type InputMode = 'paste' | 'upload' | 'url' | 'library';
 
 const TabbedInput = ({ text, onTextChange }: InputManagerProps) => {
   const [mode, setMode] = useState<InputMode>('paste');
@@ -47,13 +48,14 @@ const TabbedInput = ({ text, onTextChange }: InputManagerProps) => {
         <Tab title="Paste Text" active={mode === 'paste'} onClick={() => setMode('paste')} />
         <Tab title="Upload File" active={mode === 'upload'} onClick={() => setMode('upload')} />
         <Tab title="From URL" active={mode === 'url'} onClick={() => setMode('url')} />
+        <Tab title="Library" active={mode === 'library'} onClick={() => setMode('library')} />
       </div>
 
       {mode === 'paste' && (
         <textarea
           value={text}
           onChange={(e) => onTextChange(e.target.value)}
-          className="w-full h-40 p-2 border border-gray-300 rounded-md resize-y dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full h-64 p-2 border border-gray-300 rounded-md resize-y dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="Paste your text here..."
         />
       )}
@@ -63,7 +65,7 @@ const TabbedInput = ({ text, onTextChange }: InputManagerProps) => {
       )}
 
       {mode === 'url' && (
-        <div className="flex flex-col items-center justify-center h-40">
+        <div className="flex flex-col items-center justify-center h-64">
           <button
             onClick={handleUrlFetch}
             disabled={isLoading}
@@ -75,6 +77,10 @@ const TabbedInput = ({ text, onTextChange }: InputManagerProps) => {
             Enter a URL to fetch the text content.
           </p>
         </div>
+      )}
+
+      {mode === 'library' && (
+        <BookLibrary onTextChange={onTextChange} text={text} />
       )}
     </div>
   );

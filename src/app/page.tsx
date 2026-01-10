@@ -17,6 +17,8 @@ export default function Home() {
   const [wpm, setWpm] = useState<number>(300);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentWordIndex, setCurrentWordIndex] = useState<number>(0);
+  const [showContext, setShowContext] = useState<boolean>(false);
+  const [contextLinesToShow, setContextLinesToShow] = useState<number>(1); // Default to 1 line before and after
 
   // Effect to process text into words
   useEffect(() => {
@@ -90,15 +92,27 @@ export default function Home() {
     setWpm(newWpm);
   };
 
+  const handleToggleContext = () => {
+    setShowContext(prev => !prev);
+  }
 
+  const handleWordClick = (wordIndex: number) => {
+    setCurrentWordIndex(wordIndex);
+    // If it was playing, keep playing. If paused, stay paused.
+    // We don't want to auto-play if the user clicked on a word while paused.
+  }
+
+  const handleContextLinesChange = (lines: number) => {
+    setContextLinesToShow(lines);
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       <Header />
       <main className="flex-grow flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-2xl mx-auto space-y-6">
-          <div className="w-full h-48">
-            <RSVPViewer word={words[currentWordIndex]} />
+          <div className="w-full h-96">
+            <RSVPViewer words={words} currentWordIndex={currentWordIndex} showContext={showContext} onWordClick={handleWordClick} contextLinesToShow={contextLinesToShow} />
           </div>
           <Controls
             wpm={wpm}
@@ -107,6 +121,10 @@ export default function Home() {
             onPlayPause={handlePlayPause}
             onReset={handleReset}
             isAtEnd={currentWordIndex >= words.length -1 && words.length > 0}
+            showContext={showContext}
+            onToggleContext={handleToggleContext}
+            contextLinesToShow={contextLinesToShow}
+            onContextLinesChange={handleContextLinesChange}
           />
           <InputManager text={text} onTextChange={setText} />
         </div>
