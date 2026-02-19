@@ -37,7 +37,7 @@ A PWA implementation can be added in a future iteration.
 ### New machine
 
 ```bash
-git clone <your-repository-url>.git
+git clone https://github.com/Daclapo/RSVP-Formatter.git
 cd rsvp-formatter
 npm install
 ```
