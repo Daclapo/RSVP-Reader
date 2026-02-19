@@ -1,134 +1,180 @@
-import React, { useMemo } from 'react';
+import { useEffect, useMemo } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import type { ReaderSettings } from "@/lib/reader/types";
+import { getLineIndexForWord } from "@/lib/reader/parse";
+
+type ViewerLine = {
+  id: string;
+  text: string;
+  wordStartIndex: number;
+};
 
 type RSVPViewerProps = {
   words: string[];
+  lines: ViewerLine[];
   currentWordIndex: number;
-  showContext: boolean;
   onWordClick: (wordIndex: number) => void;
-  contextLinesToShow: number;
+  settings: ReaderSettings;
+  isPlaying: boolean;
+  className?: string;
+  onActiveLineChange?: (lineIndex: number) => void;
 };
 
-interface Line {
-  words: string[];
-  startIndex: number;
-  endIndex: number;
-}
-
-const createLines = (words: string[], charsPerLine: number): Line[] => {
-  const lines: Line[] = [];
-  if (words.length === 0) return lines;
-
-  let currentLine: string[] = [];
-  let currentLineCharCount = 0;
-  let lineStartIndex = 0;
-
-  words.forEach((word, index) => {
-    if (currentLine.length > 0 && currentLineCharCount + word.length + 1 > charsPerLine) {
-      lines.push({
-        words: currentLine,
-        startIndex: lineStartIndex,
-        endIndex: index - 1,
-      });
-      currentLine = [word];
-      currentLineCharCount = word.length;
-      lineStartIndex = index;
-    } else {
-      currentLine.push(word);
-      currentLineCharCount += word.length + 1; // for space
-    }
-  });
-
-  lines.push({
-    words: currentLine,
-    startIndex: lineStartIndex,
-    endIndex: words.length - 1,
-  });
-
-  return lines;
+const getOrpIndex = (word: string): number => {
+  const cleanLength = word.length;
+  if (cleanLength <= 1) return 0;
+  if (cleanLength <= 5) return 1;
+  if (cleanLength <= 9) return 2;
+  if (cleanLength <= 13) return 3;
+  return 4;
 };
 
-const RSVPViewer = ({ words, currentWordIndex, showContext, onWordClick, contextLinesToShow }: RSVPViewerProps) => {
-  const lines = useMemo(() => createLines(words, 50), [words]);
-  const word = words[currentWordIndex];
-
-  const renderWord = (word: string, isCurrent: boolean, key: number, wordIndex: number) => {
-    const commonProps = {
-      onClick: () => onWordClick(wordIndex),
-      className: "cursor-pointer"
-    };
-
-    if (!isCurrent) {
-      return <span key={key} {...commonProps}>{word} </span>;
-    }
-    const pivotIndex = 1;
-    const beforePivot = word.substring(0, pivotIndex);
-    const pivotChar = word[pivotIndex];
-    const afterPivot = word.substring(pivotIndex + 1);
-    return (
-      <span key={key} {...commonProps} className="font-bold text-gray-900 dark:text-gray-100 cursor-pointer">
-        {word.length > 1 ? (
-          <>
-            <span>{beforePivot}</span>
-            <span className="text-red-500">{pivotChar}</span>
-            <span>{afterPivot} </span>
-          </>
-        ) : (
-          <span>{word} </span>
-        )}
-      </span>
-    );
-  };
-
-  if (!word) {
-    return (
-      <div className="flex items-center justify-center w-full min-h-[12rem] bg-gray-100 dark:bg-gray-800 rounded-md">
-        <p className="text-5xl font-semibold font-mono text-gray-900 dark:text-gray-100">...</p>
-      </div>
-    );
-  }
-  
-  if (!showContext) {
-    const pivotIndex = 1;
-    const beforePivot = word.substring(0, pivotIndex);
-    const pivotChar = word[pivotIndex];
-    const afterPivot = word.substring(pivotIndex + 1);
-    return (
-        <div className="flex flex-col items-center justify-center w-full h-full">
-            <p className="text-5xl font-semibold font-mono text-gray-900 dark:text-gray-100 my-4">
-                {word.length > 1 ? (
-                <>
-                    <span>{beforePivot}</span>
-                    <span className="text-red-500">{pivotChar}</span>
-                    <span>{afterPivot}</span>
-                </>
-                ) : (
-                <span>{word}</span>
-                )}
-            </p>
-        </div>
-    )
-  }
-
-  const currentLineIndex = lines.findIndex(line => currentWordIndex >= line.startIndex && currentWordIndex <= line.endIndex);
-  
-  const translateYValue = (currentLineIndex * 4) - (contextLinesToShow * 4); // To center the current line
+const renderOrpWord = (word: string) => {
+  const index = getOrpIndex(word);
+  const start = word.slice(0, index);
+  const pivot = word[index] ?? "";
+  const end = word.slice(index + 1);
 
   return (
-    <div className="w-full h-full bg-gray-100 dark:bg-gray-800 rounded-md p-4 font-mono text-2xl overflow-y-auto">
-      <div className="transition-transform duration-500" style={{ transform: `translateY(-${translateYValue}rem)` }}>
-        {lines.map((line, lineIndex) => (
-          <p
-            key={line.startIndex}
-            className={`
-              h-16 text-center py-2
-              ${lineIndex === currentLineIndex ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500'}
-            `}
-          >
-            {line.words.map((w, i) => renderWord(w, line.startIndex + i === currentWordIndex, line.startIndex + i, line.startIndex + i))}
+    <>
+      <span>{start}</span>
+      <span className="text-primary">{pivot}</span>
+      <span>{end}</span>
+    </>
+  );
+};
+
+const RSVPViewer = ({
+  words,
+  lines,
+  currentWordIndex,
+  onWordClick,
+  settings,
+  isPlaying,
+  className,
+  onActiveLineChange,
+}: RSVPViewerProps) => {
+  const currentWord = words[currentWordIndex] ?? "";
+
+  const currentChunk = useMemo(() => {
+    if (words.length === 0) return [] as string[];
+    const startIndex = currentWordIndex;
+    return words.slice(startIndex, startIndex + settings.chunkSize);
+  }, [currentWordIndex, settings.chunkSize, words]);
+
+  const currentLineIndex = useMemo(() => getLineIndexForWord(lines, currentWordIndex), [lines, currentWordIndex]);
+
+  useEffect(() => {
+    onActiveLineChange?.(currentLineIndex);
+  }, [currentLineIndex, onActiveLineChange]);
+
+  const viewerStyle = {
+    backgroundColor: settings.viewerBg,
+    color: settings.viewerFg,
+    lineHeight: settings.lineHeight,
+    letterSpacing: `${settings.letterSpacing}em`,
+    wordSpacing: `${settings.wordSpacing}em`,
+    fontFamily:
+      settings.fontFamily === "serif"
+        ? "var(--font-serif)"
+        : settings.fontFamily === "mono"
+          ? "var(--font-mono)"
+          : "var(--font-sans)",
+  } as const;
+
+  if (settings.mode === "orp-word") {
+    return (
+      <Card className={className}>
+        <CardContent className="relative flex h-full min-h-[18rem] items-center justify-center rounded-lg" style={viewerStyle}>
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/70" />
+          <p className="text-center font-semibold tracking-tight" style={{ fontSize: `${1 + settings.fontSize * 0.33}rem` }}>
+            {currentWord ? renderOrpWord(currentWord) : "..."}
           </p>
-        ))}
-      </div>
-    </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (settings.mode === "chunk") {
+    return (
+      <Card className={className}>
+        <CardContent className="flex h-full min-h-[18rem] items-center justify-center rounded-lg" style={viewerStyle}>
+          <div className="text-center" style={{ fontSize: `${0.8 + settings.fontSize * 0.2}rem` }}>
+            {currentChunk.length === 0 ? (
+              <span>...</span>
+            ) : (
+              currentChunk.map((word, index) => (
+                <span key={`${currentWordIndex}-${index}`} className={index === 0 ? "font-semibold text-primary" : "text-inherit"}>
+                  {index > 0 ? " " : ""}
+                  {word}
+                </span>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const windowRadius = Math.max(settings.focusWindow + 4, 7);
+  const startLine = Math.max(0, currentLineIndex - windowRadius);
+  const endLine = Math.min(lines.length, currentLineIndex + windowRadius + 1);
+  const visibleLines = lines.slice(startLine, endLine);
+
+  return (
+    <Card className={className}>
+      <CardContent className="relative h-full min-h-[18rem] overflow-hidden rounded-lg px-4 py-6" style={viewerStyle}>
+        <div className="pointer-events-none absolute inset-x-4 top-1/2 z-10 h-px -translate-y-1/2 bg-primary/45" />
+
+        <div className="relative flex h-full flex-col items-stretch justify-center gap-2">
+          {visibleLines.map((line, offset) => {
+            const lineIndex = startLine + offset;
+            const lineWords = line.text.match(/\S+/g) ?? [];
+            const isActiveLine = lineIndex === currentLineIndex;
+            const distance = Math.abs(lineIndex - currentLineIndex);
+            const outOfFocus = distance > settings.focusWindow;
+
+            return (
+              <div
+                key={line.id}
+                className={`rounded-md px-2 py-1 text-center transition-all ${
+                  isActiveLine ? "text-primary" : "text-foreground"
+                } ${outOfFocus ? "opacity-35" : "opacity-100"}`}
+                style={{ fontSize: `${0.72 + settings.fontSize * 0.09}rem` }}
+              >
+                {lineWords.length === 0 ? (
+                  <div className="h-4" />
+                ) : (
+                  lineWords.map((word, wordOffset) => {
+                    const absoluteWordIndex = line.wordStartIndex + wordOffset;
+                    const isCurrentWord = absoluteWordIndex === currentWordIndex;
+
+                    return (
+                      <button
+                        key={`${line.id}-${wordOffset}`}
+                        type="button"
+                        onClick={() => onWordClick(absoluteWordIndex)}
+                        className={`mr-2 inline-flex rounded px-0.5 text-left transition-colors ${
+                          isCurrentWord ? "font-semibold text-primary" : "hover:text-primary"
+                        }`}
+                      >
+                        {isCurrentWord ? renderOrpWord(word) : word}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {isPlaying ? (
+          <div className="pointer-events-none absolute right-3 top-3 rounded-full border border-border/70 bg-card/90 px-2 py-0.5 text-[10px] text-muted-foreground">
+            Playing
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 };
 
