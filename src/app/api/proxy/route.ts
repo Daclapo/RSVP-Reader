@@ -62,6 +62,77 @@ const titleFromUrl = (url: string) => {
   }
 };
 
+const decodeHtmlEntities = (value: string) => {
+  const named: Record<string, string> = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: "\"",
+    apos: "'",
+    nbsp: " ",
+    ndash: "-",
+    mdash: "-",
+    rsquo: "'",
+    lsquo: "'",
+    rdquo: "\"",
+    ldquo: "\"",
+  };
+
+  return value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity: string) => {
+    const lowered = entity.toLowerCase();
+    if (lowered.startsWith("#x")) {
+      const code = Number.parseInt(lowered.slice(2), 16);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    if (lowered.startsWith("#")) {
+      const code = Number.parseInt(lowered.slice(1), 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    return named[lowered] ?? match;
+  });
+};
+
+const stripHtmlToStructuredText = (html: string, sourceUrl: string) => {
+  const title = decodeHtmlEntities(
+    html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim() ??
+      titleFromUrl(sourceUrl) ??
+      sourceUrl
+  );
+  const canonicalUrl =
+    html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["'][^>]*>/i)?.[1] ??
+    html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["'][^>]*>/i)?.[1] ??
+    sourceUrl;
+
+  const headings = Array.from(html.matchAll(/<h([1-4])[^>]*>([\s\S]*?)<\/h\1>/gi))
+    .map((match) => ({
+      level: Number(match[1]),
+      text: decodeHtmlEntities(match[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()),
+      anchor: "",
+    }))
+    .filter((heading) => heading.text.length > 0);
+
+  const readable = html
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
+    .replace(/<canvas[\s\S]*?<\/canvas>/gi, " ")
+    .replace(/<(nav|footer|form|aside|header)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<(h[1-4])[^>]*>([\s\S]*?)<\/\1>/gi, "\n\n## $2\n\n")
+    .replace(/<(p|div|section|article|main|li|blockquote|tr)[^>]*>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|section|article|main|li|blockquote|tr|h[1-4])>/gi, "\n")
+    .replace(/<[^>]+>/g, " ");
+
+  return {
+    title,
+    canonicalUrl,
+    headings,
+    text: normalizeText(decodeHtmlEntities(readable)),
+  };
+};
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
   const format = req.nextUrl.searchParams.get("format");
@@ -104,30 +175,8 @@ export async function GET(req: NextRequest) {
       return new NextResponse(text, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }
 
-    const [{ JSDOM }, { Readability }] = await Promise.all([
-      import("jsdom"),
-      import("@mozilla/readability"),
-    ]);
-    const dom = new JSDOM(body, { url });
-    const document = dom.window.document;
-
-    document.querySelectorAll("script, style, noscript, svg, canvas, picture, iframe, nav, footer, form, aside").forEach((element) => element.remove());
-    document.querySelectorAll("img").forEach((element) => element.remove());
-
-    const reader = new Readability(document.cloneNode(true) as Document);
-    const article = reader.parse();
-
-    const mainContentElement =
-      article?.textContent ? null :
-      document.querySelector("article") ||
-      document.querySelector("main") ||
-      document.querySelector("[role='main']") ||
-      document.querySelector("#content") ||
-      document.querySelector(".main-content") ||
-      document.body;
-
-    const text = normalizeText(article?.textContent ?? mainContentElement?.textContent ?? "");
-    if (!text || text.match(/\S+/g)?.length === 0) {
+    const extracted = stripHtmlToStructuredText(body, url);
+    if (!extracted.text || extracted.text.match(/\S+/g)?.length === 0) {
       return jsonError(
         "No readable article text was found. The page may block extraction, render content with scripts, or contain mostly media. Try pasting the text manually.",
         422
@@ -135,40 +184,17 @@ export async function GET(req: NextRequest) {
     }
 
     if (format === "structured") {
-      const title =
-        article?.title?.trim() ||
-        document.querySelector("h1")?.textContent?.trim() ||
-        document.querySelector("title")?.textContent?.trim() ||
-        null;
-
-      const headings = Array.from(document.querySelectorAll("h1, h2, h3, h4"))
-        .map((heading) => {
-          const textValue = heading.textContent?.replace(/\s+/g, " ").trim() ?? "";
-          if (!textValue) return null;
-          const tagLevel = Number(heading.tagName.replace("H", ""));
-          const anchor = heading.getAttribute("id") ?? "";
-          return {
-            level: Number.isNaN(tagLevel) ? 2 : tagLevel,
-            text: textValue,
-            anchor,
-          };
-        })
-        .filter((heading): heading is NonNullable<typeof heading> => heading !== null);
-
-      const canonicalUrl =
-        document.querySelector("link[rel='canonical']")?.getAttribute("href") || url;
-
       const payload: ProxyStructuredResponse = {
-        text,
-        sourceTitle: title,
-        headings,
-        canonicalUrl,
+        text: extracted.text,
+        sourceTitle: extracted.title,
+        headings: extracted.headings,
+        canonicalUrl: extracted.canonicalUrl,
       };
 
       return NextResponse.json(payload);
     }
 
-    return new NextResponse(text, {
+    return new NextResponse(extracted.text, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
       },
