@@ -1,61 +1,41 @@
-# RSVP Formatter
+# RSVP Reader
 
-RSVP Formatter is a web application for rapid serial visual presentation (RSVP) reading workflows.
-It allows importing text from multiple sources, building a structured reading outline, and reading in focused playback modes.
+[English](README.md) · [Español](README.es.md)
 
-Author: **David Clarkson**
+RSVP Reader is a local-first web app for preparing long texts and reading them with rapid serial visual presentation workflows, fixed Ebook pages, bookmarks, and local sessions.
 
-## Overview
 
-This project provides:
 
-- A **Source Workspace** to prepare content from:
-  - pasted text
-  - uploaded files (txt, md, html, pdf, doc, docx, odt, epub)
-  - one or more URLs
-  - a built-in public-domain library
-- A **Reader Mode** focused on reading flow with:
-  - ORP word mode
-  - Line flow mode
-  - Chunk mode
-- Outline extraction and synchronized navigation
-- Playback controls with speed and style settings
-- Theme presets and saved preferences
+## Features
 
-## Current Scope
+- Source import from paste, files, URL extraction, Wikipedia search, and a public-domain library.
+- Reading modes: ORP word, Line flow, Chunk, and Ebook.
+- Global reading navigation with page input, progress slider, search, outline, line navigator, sentence/paragraph jumps, and bookmarks.
+- Ebook layout with one page, two pages, portrait/landscape single-page mode, fixed page height, chapter context, keyboard page turns, line marker, and optional auto-highlight/page advance.
+- Local saved sessions with text, source metadata, settings, theme, language, progress, and bookmarks.
+- English and Spanish UI.
+- Markdown-aware paste mode for headings and Ebook rendering.
+- Local install instructions and Vercel-ready Next.js project structure.
 
-PWA/offline installation is intentionally disabled in this version.
-A PWA implementation can be added in a future iteration.
+There is no backend, login, account system, or cloud sync in this phase. Data is stored in the user's browser.
 
 ## Requirements
 
-- Node.js 20+ (recommended: latest LTS)
+- Node.js 20+
 - npm 10+
 
-## Install
+If you do not have Node.js, install the current LTS installer from [nodejs.org](https://nodejs.org/). npm is included with Node.js.
 
-### New machine
+## Run Locally
 
 ```bash
-git clone https://github.com/Daclapo/RSVP-Formatter.git
-cd rsvp-formatter
+git clone https://github.com/daclapo/RSVP-Reader.git
+cd RSVP-Reader
 npm install
-```
-
-### Update existing local copy
-
-```bash
-git pull
-npm install
-```
-
-## Run
-
-Development:
-
-```bash
 npm run dev
 ```
+
+Open `http://localhost:3000`.
 
 Production build:
 
@@ -64,63 +44,143 @@ npm run build
 npm run start
 ```
 
-Lint:
+Quality checks:
 
 ```bash
 npm run lint
+npm run build
 ```
 
-## How to Use
+## Usage
 
-### 1) Prepare text in Source Workspace
+1. Open `Source` and paste text, upload a file, load a URL, or choose a library book.
+2. If pasted text is Markdown, set `Text format` to `Markdown` so headings become navigation points.
+3. Open `Reader`, choose ORP, Line flow, Chunk, or Ebook.
+4. Use the progress slider or page input to move through the text.
+5. Add bookmarks for important locations.
+6. Save a session from `Sessions` to resume later.
+7. Use `Classic` if you prefer the older three-column workspace.
+8. Use `Settings` for theme, language, typography, Zen mode, and local data reset.
 
-- **Paste**: write directly in the editor
-- **Upload**: import multiple files, review extracted results, then append or replace editor text
-- **URL**: queue one URL per line, import all, then append or replace editor text
-- **Library**: load a public-domain book
-
-### 2) Configure playback
-
-Use playback controls to set:
-
-- reading mode (ORP / line flow / chunk)
-- WPM speed
-- font family and text metrics
-- visual colors for reader background/text
-
-### 3) Open Reader Mode
-
-In Reader Mode you can:
-
-- play and pause reading
-- search lines
-- jump via outline
-- use Zen mode for distraction-free playback
-
-## Keyboard Shortcuts
+Keyboard shortcuts:
 
 - `Space` / `K`: play or pause
-- `ArrowLeft`: previous step
-- `ArrowRight`: next step
-- `[` and `]`: decrease/increase WPM
-- `F` (Reader Mode): toggle find
-- `Esc`: exit Zen or close Reader panels
+- `ArrowLeft`: previous word, or previous page in Ebook
+- `ArrowRight`: next word, or next page in Ebook
+- `[` and `]`: decrease or increase WPM
+- `F` in Reader: focus line search
+- `Esc`: exit Zen
+
+## About the App
+
+The screenshots below follow the normal workflow: prepare a source, choose a reader mode, then use focused tools such as Zen, Classic layout, themes, sessions, and bookmarks.
+
+### Prepare a Source
+
+Paste text directly and review the exact content that will be sent to the reader.
+
+![Source paste](docs/img/source-paste.png)
+
+Upload common document formats such as `.pdf`, `.txt`, `.epub`, `.md`, and `.docx`.
+
+![Source upload](docs/img/source-upload.png)
+
+Load a single URL, queue multiple URLs, or search and import a Wikipedia article from the URL / Wikipedia source panel.
+
+![Source URL and Wikipedia](docs/img/source-url.png)
+
+Open a public-domain title from the built-in library.
+
+![Source library](docs/img/source-library.png)
+
+### Read with RSVP Modes
+
+ORP mode centers one word at a time and marks the optimal recognition point.
+
+![Reader ORP](docs/img/read-orp.png)
+
+Line Flow keeps the current line centered while preserving context before and after the active position.
+
+![Reader line flow](docs/img/read-lineflow.png)
+
+Chunk mode advances through small groups of words instead of single words.
+
+![Reader chunk](docs/img/read-chunk.png)
+
+### Read Naturally in Ebook Mode
+
+The two-page Ebook layout is designed for more traditional reading, with page navigation, chapter context, and an optional line marker.
+
+![Ebook two-page reader](docs/img/read-twopage.png)
+
+You can also read in a single-page layout.
+
+![Ebook one-page reader](docs/img/read-onepage.png)
+
+Or a single-page landscape layout, that uses a broader page, where you can fit more text, and do less line jumping for a smoother reading experience. This image also show the 'player' for this mode where the word will be highlighted, and there´ll be a dot that indicates the line you´re currently reading, for easy line jumping.
+![Ebook landscape reader](docs/img/read-landscape.png)
+
+### Other Features
+
+#### Zen mode
+Zen mode makes the reader fullscreen and removes surrounding interface. Use `Esc` to exit, and `Space` or `K` to play or pause.
+
+![Zen mode](docs/img/zen-mode.png)
+
+#### Classic viewing mode
+Classic view keeps source, reader, and summary tools visible in a single workspace for users who prefer the older arrangement.
+
+![Classic mode](docs/img/classic-arrangement.png)
+
+#### Themes
+Seven visual themes are available from the Theme menu in the navbar.
+
+![Themes](docs/img/themes.png)
+
+#### Sessions
+Sessions let you save multiple reading states locally, including text, source metadata, reading position, bookmarks, theme, language, and reader settings.
+
+![Sessions](docs/img/sessions.png)
+
+
+
+## Sources
+
+Supported uploads are best effort for:
+
+- `.txt`, `.md`, `.markdown`
+- `.html`, `.htm`
+- `.pdf`
+- `.doc`, `.docx`
+- `.odt`
+- `.epub`
+
+URL imports use `src/app/api/proxy/route.ts`, `@mozilla/readability`, and local cleanup. Some websites block extraction; in those cases, paste text manually.
+
+Wikipedia search uses MediaWiki `opensearch` and page parsing APIs through `src/app/api/wikipedia/route.ts`, then cleans the article into readable Markdown-like text.
+
+The built-in library uses public-domain texts, mostly from Project Gutenberg.
+
+## Local Data
+
+The app stores active text, settings, sessions, and bookmarks in browser storage. Very large texts may exceed browser storage limits, so active text persistence is capped defensively. The app should not crash on storage quota errors.
+
+Use `Settings > Clear local data` to remove active text, sessions, bookmarks, theme, language, and settings from the current browser.
+
 
 ## Project Structure
 
-- `src/app/page.tsx`: main UI workflow (workspace + reader)
-- `src/components/`: feature components
-- `src/components/ui/`: reusable UI primitives
-- `src/lib/reader/parse.ts`: parsing and outline mapping
-- `src/lib/reader/file-extract.ts`: multi-format file extraction
-- `src/app/api/proxy/route.ts`: URL content extraction endpoint
+- `src/app/page.tsx`: main application shell and view composition.
+- `src/app/api/proxy/route.ts`: URL import proxy and Readability extraction.
+- `src/components/`: feature components and local UI primitives.
+- `src/hooks/`: playback, preferences, and sessions.
+- `src/lib/i18n/`: local dictionaries.
+- `src/lib/library/`: public-domain book catalog.
+- `src/lib/reader/`: parsing, cleanup, defaults, presets, fonts, and shared types.
+- `src/lib/storage/`: browser storage helpers.
+- `docs/`: usage, local install, deployment, and contribution notes.
 
-## Notes on File Extraction
 
-- `docx`, `pdf`, `odt`, and `epub` are parsed with best-effort extraction.
-- Legacy binary `doc` files are best-effort and may require conversion to `docx` for better results.
-- Complex formatting is flattened into reading text intentionally.
+## Contributing
 
-## License
-
-MIT. See `LICENSE`.
+Contributions are welcome: reading modes, extraction quality, public-domain sources, accessibility, mobile polish, documentation, and tests are all useful areas.

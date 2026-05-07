@@ -23,8 +23,6 @@ export function Slider({
   id,
 }: SliderProps) {
   const numericValue = value[0] ?? min;
-  const safeRange = Math.max(max - min, 1);
-  const percent = ((numericValue - min) / safeRange) * 100;
 
   return (
     <input
@@ -36,10 +34,8 @@ export function Slider({
       value={numericValue}
       onChange={(event) => onValueChange([Number(event.target.value)])}
       disabled={disabled}
-      className={cn("h-2 w-full cursor-pointer appearance-none rounded-full", className)}
-      style={{
-        background: `linear-gradient(90deg, var(--primary) ${percent}%, var(--muted) ${percent}%)`,
-      }}
+      className={cn("h-6 w-full cursor-pointer", className)}
+      style={{ accentColor: "var(--primary)" }}
     />
   );
 }

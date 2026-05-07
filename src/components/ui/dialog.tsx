@@ -54,7 +54,7 @@ function DialogPortal({ children }: { children: React.ReactNode }) {
 }
 
 function DialogOverlay({ className }: { className?: string }) {
-  return <div className={cn("fixed inset-0 z-50 bg-black/50", className)} />;
+  return <div className={cn("fixed inset-0 bg-black/50", className)} />;
 }
 
 function DialogContent({ className, children }: { className?: string; children: React.ReactNode }) {
@@ -65,13 +65,13 @@ function DialogContent({ className, children }: { className?: string; children: 
   return (
     <DialogPortal>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <DialogOverlay />
         <button
           type="button"
           aria-label="Close dialog"
-          className="absolute inset-0"
+          className="absolute inset-0 z-[1]"
           onClick={() => setOpen(false)}
         />
-        <DialogOverlay />
         <div className={cn("relative z-10 w-full max-w-2xl rounded-xl border border-border bg-card p-6 shadow-xl", className)}>
           {children}
         </div>

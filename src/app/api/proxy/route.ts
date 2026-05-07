@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { JSDOM } from "jsdom";
+import { Readability } from "@mozilla/readability";
+import { cleanImportedText } from "@/lib/reader/text-cleanup";
 import type { ProxyStructuredResponse } from "@/lib/reader/types";
 
 const normalizeText = (input: string) => {
@@ -14,7 +16,7 @@ const normalizeText = (input: string) => {
     compacted.push(line);
   });
 
-  return compacted.join("\n").trim();
+  return cleanImportedText(compacted.join("\n"));
 };
 
 export async function GET(req: NextRequest) {
@@ -26,9 +28,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return NextResponse.json({ error: "Only http and https URLs are supported" }, { status: 400 });
+    }
+
     const response = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 RSVP-Formatter/2.0",
+        "User-Agent": "Mozilla/5.0 RSVP-Reader/2.0",
       },
     });
 
@@ -43,9 +50,14 @@ export async function GET(req: NextRequest) {
     const dom = new JSDOM(html);
     const document = dom.window.document;
 
-    document.querySelectorAll("script, style, noscript").forEach((element) => element.remove());
+    document.querySelectorAll("script, style, noscript, svg, canvas, picture, iframe, nav, footer, form, aside").forEach((element) => element.remove());
+    document.querySelectorAll("img").forEach((element) => element.remove());
+
+    const reader = new Readability(document.cloneNode(true) as Document);
+    const article = reader.parse();
 
     const mainContentElement =
+      article?.textContent ? null :
       document.querySelector("article") ||
       document.querySelector("main") ||
       document.querySelector("[role='main']") ||
@@ -53,10 +65,20 @@ export async function GET(req: NextRequest) {
       document.querySelector(".main-content") ||
       document.body;
 
-    const text = normalizeText(mainContentElement?.textContent ?? "");
+    const text = normalizeText(article?.textContent ?? mainContentElement?.textContent ?? "");
+    if (!text || text.match(/\S+/g)?.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "No readable article text was found. The page may block extraction, render content with scripts, or contain mostly media. Try pasting the text manually.",
+        },
+        { status: 422 }
+      );
+    }
 
     if (format === "structured") {
       const title =
+        article?.title?.trim() ||
         document.querySelector("h1")?.textContent?.trim() ||
         document.querySelector("title")?.textContent?.trim() ||
         null;

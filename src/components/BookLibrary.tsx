@@ -3,57 +3,32 @@ import { BookOpenText, Download, Search } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import type { ProxyStructuredResponse, SourceMeta } from "@/lib/reader/types";
+import type { TranslationKey } from "@/lib/i18n/dictionaries";
+import { libraryBooks } from "@/lib/library/books";
+import { cleanReadingText, countWords } from "@/lib/reader/text-cleanup";
+import type { Locale, ProxyStructuredResponse, SourceMeta } from "@/lib/reader/types";
 
 type BookLibraryProps = {
   onTextChange: (text: string) => void;
   onSourceMetaChange: (meta: SourceMeta) => void;
+  locale: Locale;
+  t: (key: TranslationKey) => string;
 };
+const PAGE_SIZE = 24;
 
-const books = [
-  { title: "Pride and Prejudice", author: "Jane Austen", url: "https://www.gutenberg.org/ebooks/1342.txt.utf-8" },
-  { title: "Frankenstein; Or, The Modern Prometheus", author: "Mary Shelley", url: "https://www.gutenberg.org/ebooks/84.txt.utf-8" },
-  { title: "A Tale of Two Cities", author: "Charles Dickens", url: "https://www.gutenberg.org/ebooks/98.txt.utf-8" },
-  { title: "The Adventures of Sherlock Holmes", author: "Arthur Conan Doyle", url: "https://www.gutenberg.org/ebooks/1661.txt.utf-8" },
-  { title: "The Time Machine", author: "H. G. Wells", url: "https://www.gutenberg.org/ebooks/35.txt.utf-8" },
-  { title: "The Picture of Dorian Gray", author: "Oscar Wilde", url: "https://www.gutenberg.org/ebooks/174.txt.utf-8" },
-  { title: "Dracula", author: "Bram Stoker", url: "https://www.gutenberg.org/ebooks/345.txt.utf-8" },
-  { title: "Moby Dick; or The Whale", author: "Herman Melville", url: "https://www.gutenberg.org/ebooks/2701.txt.utf-8" },
-  { title: "Alice's Adventures in Wonderland", author: "Lewis Carroll", url: "https://www.gutenberg.org/ebooks/11.txt.utf-8" },
-  { title: "The Strange Case of Dr Jekyll and Mr Hyde", author: "Robert Louis Stevenson", url: "https://www.gutenberg.org/ebooks/43.txt.utf-8" },
-  { title: "The War of the Worlds", author: "H. G. Wells", url: "https://www.gutenberg.org/ebooks/36.txt.utf-8" },
-  { title: "Treasure Island", author: "Robert Louis Stevenson", url: "https://www.gutenberg.org/ebooks/120.txt.utf-8" },
-  { title: "The Call of the Wild", author: "Jack London", url: "https://www.gutenberg.org/ebooks/215.txt.utf-8" },
-  { title: "The Hound of the Baskervilles", author: "Arthur Conan Doyle", url: "https://www.gutenberg.org/ebooks/2852.txt.utf-8" },
-  { title: "The Count of Monte Cristo", author: "Alexandre Dumas", url: "https://www.gutenberg.org/ebooks/1184.txt.utf-8" },
-  { title: "The Republic", author: "Plato", url: "https://www.gutenberg.org/ebooks/1497.txt.utf-8" },
-  { title: "The Prince", author: "Niccolo Machiavelli", url: "https://www.gutenberg.org/ebooks/1232.txt.utf-8" },
-  { title: "Meditations", author: "Marcus Aurelius", url: "https://www.gutenberg.org/ebooks/2680.txt.utf-8" },
-  { title: "Walden", author: "Henry David Thoreau", url: "https://www.gutenberg.org/ebooks/205.txt.utf-8" },
-  { title: "Leaves of Grass", author: "Walt Whitman", url: "https://www.gutenberg.org/ebooks/1322.txt.utf-8" },
-  { title: "The Scarlet Letter", author: "Nathaniel Hawthorne", url: "https://www.gutenberg.org/ebooks/33.txt.utf-8" },
-  { title: "The Jungle Book", author: "Rudyard Kipling", url: "https://www.gutenberg.org/ebooks/35997.txt.utf-8" },
-  { title: "The Wonderful Wizard of Oz", author: "L. Frank Baum", url: "https://www.gutenberg.org/ebooks/55.txt.utf-8" },
-  { title: "A Christmas Carol", author: "Charles Dickens", url: "https://www.gutenberg.org/ebooks/46.txt.utf-8" },
-  { title: "The Secret Garden", author: "Frances Hodgson Burnett", url: "https://www.gutenberg.org/ebooks/113.txt.utf-8" },
-  { title: "Heart of Darkness", author: "Joseph Conrad", url: "https://www.gutenberg.org/ebooks/219.txt.utf-8" },
-  { title: "The Iliad", author: "Homer", url: "https://www.gutenberg.org/ebooks/6130.txt.utf-8" },
-  { title: "The Odyssey", author: "Homer", url: "https://www.gutenberg.org/ebooks/1727.txt.utf-8" },
-  { title: "Little Women", author: "Louisa May Alcott", url: "https://www.gutenberg.org/ebooks/514.txt.utf-8" },
-  { title: "The Metamorphosis", author: "Franz Kafka", url: "https://www.gutenberg.org/ebooks/5200.txt.utf-8" },
-];
-
-const BookLibrary = ({ onTextChange, onSourceMetaChange }: BookLibraryProps) => {
+const BookLibrary = ({ onTextChange, onSourceMetaChange, locale, t }: BookLibraryProps) => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const filteredBooks = useMemo(() => {
     const safeQuery = query.trim().toLowerCase();
-    if (!safeQuery) return books;
+    const localeAwareBooks = libraryBooks.filter((book) => book.language === locale || book.language === "en");
+    if (!safeQuery) return localeAwareBooks;
 
-    return books.filter((book) => `${book.title} ${book.author}`.toLowerCase().includes(safeQuery));
-  }, [query]);
+    return localeAwareBooks.filter((book) => `${book.title} ${book.author} ${book.language}`.toLowerCase().includes(safeQuery));
+  }, [locale, query]);
+  const visibleBooks = filteredBooks.slice(0, visibleCount);
 
   const handleBookFetch = async (title: string, url: string) => {
     setIsLoading(title);
@@ -68,13 +43,16 @@ const BookLibrary = ({ onTextChange, onSourceMetaChange }: BookLibraryProps) => 
       }
 
       const payload = (await response.json()) as ProxyStructuredResponse;
-      onTextChange(payload.text);
+      const cleaned = cleanReadingText(payload.text);
+      onTextChange(cleaned);
       onSourceMetaChange({
         kind: "library",
         sourceTitle: title,
         sourceUrl: url,
         headings: payload.headings,
         sourceUrls: [url],
+        wordCount: countWords(cleaned),
+        textFormat: "plain",
       });
 
       toast.success(`${title} loaded`, { id: toastId });
@@ -93,23 +71,22 @@ const BookLibrary = ({ onTextChange, onSourceMetaChange }: BookLibraryProps) => 
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search title or author"
+          placeholder={t("search")}
+          aria-label={t("search")}
           className="pl-9"
         />
       </div>
 
-      <ScrollArea className="h-[30rem] rounded-xl border border-border bg-background/70 p-3">
-        <div className="space-y-2">
-          {filteredBooks.map((book) => {
-            const loading = isLoading === book.title;
-
-            return (
-              <article key={book.title} className="rounded-lg border border-border/80 bg-card p-3">
-                <div className="mb-3 flex items-start gap-2">
-                  <BookOpenText className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold leading-snug">{book.title}</p>
-                    <p className="text-xs text-muted-foreground">{book.author}</p>
+      <div className="rounded-lg border border-border bg-background/70 p-2">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {visibleBooks.map((book) => (
+              <article key={book.title} className="flex min-w-0 items-center gap-2 rounded-md border border-border/80 bg-card px-2.5 py-2">
+                <BookOpenText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium leading-tight">{book.title}</p>
+                  <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="truncate">{book.author}</span>
+                    <span className="rounded border border-border/70 px-1 uppercase">{book.language}</span>
                   </div>
                 </div>
 
@@ -117,22 +94,27 @@ const BookLibrary = ({ onTextChange, onSourceMetaChange }: BookLibraryProps) => 
                   onClick={() => handleBookFetch(book.title, book.url)}
                   disabled={!!isLoading}
                   size="sm"
-                  className="w-full"
+                  variant="outline"
+                  className="h-8 shrink-0 px-2"
+                  aria-label={`${t("useText")}: ${book.title}`}
                 >
                   <Download className="h-4 w-4" />
-                  {loading ? "Loading..." : "Use text"}
                 </Button>
               </article>
-            );
-          })}
+          ))}
 
           {filteredBooks.length === 0 ? (
             <p className="rounded-lg border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground">
-              No books match your search.
+              {t("noBooks")}
             </p>
           ) : null}
         </div>
-      </ScrollArea>
+        {visibleCount < filteredBooks.length ? (
+          <Button variant="outline" size="sm" className="mt-2 w-full" onClick={() => setVisibleCount((value) => value + PAGE_SIZE)}>
+            {t("showMore")}
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 };

@@ -2,8 +2,9 @@ import { useCallback, useMemo, useState } from "react";
 import { FileText, Trash2, UploadCloud, X } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import { extractFileDocument, formatFileSize, supportedUploadMessage } from "@/lib/reader/file-extract";
+import { countWords } from "@/lib/reader/text-cleanup";
 
 export type UploadedDocument = {
   id: string;
@@ -11,19 +12,23 @@ export type UploadedDocument = {
   sizeBytes: number;
   type: string;
   text: string;
+  wordCount: number;
   warning?: string;
 };
 
 type FileDropzoneProps = {
   documents: UploadedDocument[];
   onDocumentsChange: (documents: UploadedDocument[]) => void;
+  t: (key: TranslationKey) => string;
 };
 
 const toId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const PAGE_SIZE = 8;
 
-const FileDropzone = ({ documents, onDocumentsChange }: FileDropzoneProps) => {
+const FileDropzone = ({ documents, onDocumentsChange, t }: FileDropzoneProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<string>("");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
@@ -42,17 +47,20 @@ const FileDropzone = ({ documents, onDocumentsChange }: FileDropzoneProps) => {
             sizeBytes: parsed.sizeBytes,
             type: parsed.extension || parsed.mimeType,
             text: parsed.text,
+            wordCount: countWords(parsed.text),
             warning: parsed.warning,
           });
         } catch (error) {
           console.error("File extraction failed:", error);
+          const warning = error instanceof Error ? error.message : "This file could not be parsed.";
           extracted.push({
             id: toId(),
             name: file.name,
             sizeBytes: file.size,
             type: file.type || "unknown",
             text: "",
-            warning: "This file could not be parsed.",
+            wordCount: 0,
+            warning,
           });
         }
       }
@@ -82,6 +90,7 @@ const FileDropzone = ({ documents, onDocumentsChange }: FileDropzoneProps) => {
     () => [...documents].sort((a, b) => a.name.localeCompare(b.name)),
     [documents]
   );
+  const visibleDocuments = sortedDocuments.slice(0, visibleCount);
 
   return (
     <div className="space-y-3">
@@ -98,36 +107,34 @@ const FileDropzone = ({ documents, onDocumentsChange }: FileDropzoneProps) => {
           <p className="text-sm text-muted-foreground">{status || "Processing files..."}</p>
         ) : (
           <>
-            <p className="text-sm font-medium">
-              {isDragActive ? "Drop files here" : "Drag and drop multiple files, or click to browse"}
-            </p>
+            <p className="text-sm font-medium">{isDragActive ? t("dropFiles") : t("browseFiles")}</p>
             <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
               <FileText className="h-3.5 w-3.5" />
-              <span>{supportedUploadMessage}</span>
+              <span>{t("supported")}: {supportedUploadMessage}</span>
             </div>
           </>
         )}
       </div>
 
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">{documents.length} file(s) queued</p>
+        <p className="text-xs text-muted-foreground">{documents.length} {t("fileQueued")}</p>
         {documents.length > 0 ? (
           <Button variant="outline" size="sm" onClick={() => onDocumentsChange([])}>
             <Trash2 className="h-4 w-4" />
-            Clear list
+            {t("clearList")}
           </Button>
         ) : null}
       </div>
 
-      <ScrollArea className="h-52 rounded-xl border border-border bg-background/70 p-2">
+      <div className="rounded-xl border border-border bg-background/70 p-2">
         <div className="space-y-1">
-          {sortedDocuments.map((document) => (
+          {visibleDocuments.map((document) => (
             <article key={document.id} className="rounded-md border border-border/70 bg-card p-2">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="break-words text-sm font-medium">{document.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {formatFileSize(document.sizeBytes)} · {document.type || "unknown"}
+                    {formatFileSize(document.sizeBytes)} · {document.type || "unknown"} · {document.wordCount} {t("words")}
                   </p>
                   {document.warning ? (
                     <p className="mt-1 text-xs text-amber-700">{document.warning}</p>
@@ -147,11 +154,16 @@ const FileDropzone = ({ documents, onDocumentsChange }: FileDropzoneProps) => {
 
           {documents.length === 0 ? (
             <p className="rounded-md border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
-              No files imported yet.
+              {t("noFiles")}
             </p>
           ) : null}
         </div>
-      </ScrollArea>
+        {visibleCount < sortedDocuments.length ? (
+          <Button variant="outline" size="sm" className="mt-2 w-full" onClick={() => setVisibleCount((value) => value + PAGE_SIZE)}>
+            {t("showMore")}
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 };

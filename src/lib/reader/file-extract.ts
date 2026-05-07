@@ -46,24 +46,20 @@ const stripMarkup = (markup: string) => {
 };
 
 const extractPdf = async (file: File) => {
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const data = await readArrayBuffer(file);
-  const loadingTask = pdfjsLib.getDocument({ data: data.slice(0), disableWorker: true } as unknown as Parameters<typeof pdfjsLib.getDocument>[0]);
-  const pdf = await loadingTask.promise;
+  const formData = new FormData();
+  formData.append("file", file);
 
-  const chunks: string[] = [];
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-    const page = await pdf.getPage(pageNumber);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (pageText) chunks.push(pageText);
+  const response = await fetch("/api/extract-pdf", {
+    method: "POST",
+    body: formData,
+  });
+  const payload = (await response.json()) as { text?: string; error?: string };
+
+  if (!response.ok || !payload.text) {
+    throw new Error(payload.error ?? "PDF extraction failed.");
   }
 
-  return chunks.join("\n\n");
+  return payload.text;
 };
 
 const extractDocx = async (file: File) => {
