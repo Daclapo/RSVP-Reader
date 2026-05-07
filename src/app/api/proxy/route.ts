@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { JSDOM } from "jsdom";
-import { Readability } from "@mozilla/readability";
 import { cleanImportedText } from "@/lib/reader/text-cleanup";
 import type { ProxyStructuredResponse } from "@/lib/reader/types";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+const REQUEST_TIMEOUT_MS = 20_000;
+const TEXT_CONTENT_TYPES = [
+  "text/plain",
+  "text/markdown",
+  "application/octet-stream",
+];
+
+const userAgent =
+  "RSVP-Reader/1.0 (+https://github.com/Daclapo/RSVP-Reader; local-first reading app)";
 
 const normalizeText = (input: string) => {
   const lines = input
@@ -19,35 +30,85 @@ const normalizeText = (input: string) => {
   return cleanImportedText(compacted.join("\n"));
 };
 
+const jsonError = (error: string, status = 500, detail?: string) =>
+  NextResponse.json({ error, detail }, { status });
+
+const fetchWithTimeout = async (url: string) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": userAgent,
+        Accept: "text/html, text/plain, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8",
+        "Accept-Language": "en,es;q=0.9",
+      },
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const titleFromUrl = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    const lastSegment = parsed.pathname.split("/").filter(Boolean).at(-1);
+    return lastSegment ? decodeURIComponent(lastSegment).replace(/\.(txt|utf-8|html?|md)$/gi, "").replace(/[-_]+/g, " ") : parsed.hostname;
+  } catch {
+    return null;
+  }
+};
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
   const format = req.nextUrl.searchParams.get("format");
 
   if (!url) {
-    return NextResponse.json({ error: "URL is required" }, { status: 400 });
+    return jsonError("URL is required", 400);
   }
 
   try {
     const parsedUrl = new URL(url);
     if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-      return NextResponse.json({ error: "Only http and https URLs are supported" }, { status: 400 });
+      return jsonError("Only http and https URLs are supported", 400);
     }
 
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 RSVP-Reader/2.0",
-      },
-    });
+    const response = await fetchWithTimeout(url);
 
     if (!response.ok) {
-      return NextResponse.json(
-        { error: `Failed to fetch: ${response.statusText}` },
-        { status: response.status }
-      );
+      return jsonError(`Failed to fetch: ${response.statusText || response.status}`, response.status);
     }
 
-    const html = await response.text();
-    const dom = new JSDOM(html);
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    const body = await response.text();
+
+    if (TEXT_CONTENT_TYPES.some((type) => contentType.includes(type)) || /\.txt(?:\.utf-8)?($|[?#])/i.test(parsedUrl.href)) {
+      const text = normalizeText(body);
+      if (!text || text.match(/\S+/g)?.length === 0) {
+        return jsonError("No readable text was found in this source.", 422);
+      }
+
+      if (format === "structured") {
+        const payload: ProxyStructuredResponse = {
+          text,
+          sourceTitle: titleFromUrl(url),
+          headings: [],
+          canonicalUrl: url,
+        };
+        return NextResponse.json(payload);
+      }
+
+      return new NextResponse(text, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    }
+
+    const [{ JSDOM }, { Readability }] = await Promise.all([
+      import("jsdom"),
+      import("@mozilla/readability"),
+    ]);
+    const dom = new JSDOM(body, { url });
     const document = dom.window.document;
 
     document.querySelectorAll("script, style, noscript, svg, canvas, picture, iframe, nav, footer, form, aside").forEach((element) => element.remove());
@@ -67,12 +128,9 @@ export async function GET(req: NextRequest) {
 
     const text = normalizeText(article?.textContent ?? mainContentElement?.textContent ?? "");
     if (!text || text.match(/\S+/g)?.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "No readable article text was found. The page may block extraction, render content with scripts, or contain mostly media. Try pasting the text manually.",
-        },
-        { status: 422 }
+      return jsonError(
+        "No readable article text was found. The page may block extraction, render content with scripts, or contain mostly media. Try pasting the text manually.",
+        422
       );
     }
 
@@ -112,11 +170,18 @@ export async function GET(req: NextRequest) {
 
     return new NextResponse(text, {
       headers: {
-        "Content-Type": "text/plain",
+        "Content-Type": "text/plain; charset=utf-8",
       },
     });
   } catch (error) {
     console.error("Proxy fetching error:", error);
-    return NextResponse.json({ error: "An internal error occurred" }, { status: 500 });
+    const isAbort = error instanceof Error && error.name === "AbortError";
+    return jsonError(
+      isAbort
+        ? "The source took too long to respond. Try again, use Wikipedia/Library if available, or paste the text manually."
+        : "Could not import this source from the server. The site may block automated extraction.",
+      isAbort ? 504 : 500,
+      error instanceof Error ? error.message : undefined
+    );
   }
 }

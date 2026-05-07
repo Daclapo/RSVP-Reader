@@ -53,7 +53,13 @@ const extractPdf = async (file: File) => {
     method: "POST",
     body: formData,
   });
-  const payload = (await response.json()) as { text?: string; error?: string };
+  const rawPayload = await response.text();
+  let payload: { text?: string; error?: string };
+  try {
+    payload = rawPayload ? JSON.parse(rawPayload) as { text?: string; error?: string } : {};
+  } catch {
+    payload = { error: `PDF extraction returned ${response.status}: ${rawPayload.slice(0, 140)}` };
+  }
 
   if (!response.ok || !payload.text) {
     throw new Error(payload.error ?? "PDF extraction failed.");

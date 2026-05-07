@@ -16,6 +16,18 @@ type BookLibraryProps = {
 };
 const PAGE_SIZE = 24;
 
+const readJsonResponse = async <T,>(response: Response): Promise<T & { error?: string }> => {
+  const text = await response.text();
+  if (!text) return {} as T & { error?: string };
+  try {
+    return JSON.parse(text) as T & { error?: string };
+  } catch {
+    return {
+      error: response.ok ? "The server returned an unreadable response." : `Server returned ${response.status}: ${text.slice(0, 140)}`,
+    } as T & { error?: string };
+  }
+};
+
 const BookLibrary = ({ onTextChange, onSourceMetaChange, locale, t }: BookLibraryProps) => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -36,13 +48,12 @@ const BookLibrary = ({ onTextChange, onSourceMetaChange, locale, t }: BookLibrar
 
     try {
       const response = await fetch(`/api/proxy?url=${encodeURIComponent(url)}&format=structured`);
+      const payload = await readJsonResponse<ProxyStructuredResponse>(response);
       if (!response.ok) {
-        const errorData = await response.json();
-        toast.error(`Could not load ${title}: ${errorData.error}`, { id: toastId });
+        toast.error(`Could not load ${title}: ${payload.error ?? "Fetch failed"}`, { id: toastId });
         return;
       }
 
-      const payload = (await response.json()) as ProxyStructuredResponse;
       const cleaned = cleanReadingText(payload.text);
       onTextChange(cleaned);
       onSourceMetaChange({

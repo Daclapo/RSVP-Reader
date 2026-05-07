@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const ensurePromiseWithResolvers = () => {
   if ("withResolvers" in Promise) return;

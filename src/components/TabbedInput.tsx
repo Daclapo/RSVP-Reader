@@ -67,6 +67,20 @@ const isValidUrl = (value: string) => {
   }
 };
 
+const readJsonResponse = async <T,>(response: Response): Promise<T & { error?: string }> => {
+  const text = await response.text();
+  if (!text) return {} as T & { error?: string };
+  try {
+    return JSON.parse(text) as T & { error?: string };
+  } catch {
+    return {
+      error: response.ok ? "The server returned an unreadable response." : `Server returned ${response.status}: ${text.slice(0, 140)}`,
+    } as T & { error?: string };
+  }
+};
+
+const wikiApiBase = (lang: Locale) => `https://${lang === "es" ? "es" : "en"}.wikipedia.org/w/api.php`;
+
 const composeFromFiles = (documents: UploadedDocument[]) =>
   documents
     .filter((document) => document.text.trim().length > 0)
@@ -117,10 +131,35 @@ const TabbedInput = ({ text, sourceMeta, onTextChange, onSourceMetaChange, local
     setIsSearchingWikipedia(true);
     try {
       const response = await fetch(`/api/wikipedia?action=search&lang=${wikipediaLanguage}&q=${encodeURIComponent(query)}`);
-      const payload = await response.json();
+      let payload = await readJsonResponse<{ results?: WikipediaSearchResult[] }>(response);
       if (!response.ok) {
-        toast.error(payload.error || "Wikipedia search failed.");
-        return;
+        const directUrl = new URL(wikiApiBase(wikipediaLanguage));
+        directUrl.search = new URLSearchParams({
+          action: "opensearch",
+          search: query,
+          namespace: "0",
+          limit: "8",
+          redirects: "resolve",
+          format: "json",
+          origin: "*",
+        }).toString();
+        const directResponse = await fetch(directUrl);
+        if (directResponse.ok) {
+          const directPayload = (await directResponse.json()) as [string, string[], string[], string[]];
+          payload = {
+            results: directPayload[1].map((title, index) => ({
+              title,
+              description: directPayload[2][index] ?? "",
+              url: directPayload[3][index] ?? "",
+            })),
+          };
+        }
+      }
+      if (!response.ok) {
+        if (!payload.results) {
+          toast.error(payload.error || "Wikipedia search failed.");
+          return;
+        }
       }
       setWikipediaResults(payload.results ?? []);
     } catch (error) {
@@ -135,7 +174,7 @@ const TabbedInput = ({ text, sourceMeta, onTextChange, onSourceMetaChange, local
     setIsLoadingWikipedia(true);
     try {
       const response = await fetch(`/api/wikipedia?action=page&lang=${wikipediaLanguage}&title=${encodeURIComponent(result.title)}`);
-      const payload = (await response.json()) as ProxyStructuredResponse & { error?: string };
+      const payload = await readJsonResponse<ProxyStructuredResponse>(response);
       if (!response.ok) {
         toast.error(payload.error || "Could not load this Wikipedia article.");
         return;
@@ -202,13 +241,12 @@ const TabbedInput = ({ text, sourceMeta, onTextChange, onSourceMetaChange, local
     setIsLoadingUrls(true);
     try {
       const response = await fetch(`/api/proxy?url=${encodeURIComponent(url)}&format=structured`);
+      const payload = await readJsonResponse<ProxyStructuredResponse>(response);
       if (!response.ok) {
-        const errorData = await response.json();
-        toast.error(errorData.error || "Could not import this URL.");
+        toast.error(payload.error || "Could not import this URL.");
         return;
       }
 
-      const payload = (await response.json()) as ProxyStructuredResponse;
       const cleaned = cleanReadingText(payload.text);
       const title = payload.sourceTitle || url;
       onTextChange(`# ${title}\n\n${cleaned}`);
@@ -246,18 +284,17 @@ const TabbedInput = ({ text, sourceMeta, onTextChange, onSourceMetaChange, local
         setUrlQueue([...updatedQueue, ...urlQueue.slice(updatedQueue.length)]);
 
         const response = await fetch(`/api/proxy?url=${encodeURIComponent(item.url)}&format=structured`);
+        const payload = await readJsonResponse<ProxyStructuredResponse>(response);
         if (!response.ok) {
-          const errorData = await response.json();
           updatedQueue[updatedQueue.length - 1] = {
             ...item,
             status: "error",
-            error: errorData.error || "Fetch failed",
+            error: payload.error || "Fetch failed",
           };
           setUrlQueue([...updatedQueue, ...urlQueue.slice(updatedQueue.length)]);
           continue;
         }
 
-        const payload = (await response.json()) as ProxyStructuredResponse;
         const cleaned = cleanReadingText(payload.text);
         updatedQueue[updatedQueue.length - 1] = {
           ...item,
